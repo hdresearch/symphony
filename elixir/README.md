@@ -32,17 +32,19 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
    [Harness engineering](https://openai.com/index/harness-engineering/).
 2. Get a new personal token in Linear via Settings → Security & access → Personal API keys, and
    set it as the `LINEAR_API_KEY` environment variable.
-3. Copy this directory's `WORKFLOW.md` to your repo.
-4. Optionally copy the `commit`, `push`, `pull`, `land`, and `linear` skills to your repo.
+3. Set the `OPENAI_API_KEY` environment variable for Codex authentication, or run `codex login`
+   interactively before starting Symphony.
+4. Copy this directory's `WORKFLOW.md` to your repo.
+5. Optionally copy the `commit`, `push`, `pull`, `land`, and `linear` skills to your repo.
    - The `linear` skill expects Symphony's `linear_graphql` app-server tool for raw Linear GraphQL
      operations such as comment editing or upload flows.
-5. Customize the copied `WORKFLOW.md` file for your project.
+6. Customize the copied `WORKFLOW.md` file for your project.
    - To get your project's slug, right-click the project and copy its URL. The slug is part of the
      URL.
    - When creating a workflow based on this repo, note that it depends on non-standard Linear
      issue statuses: "Rework", "Human Review", and "Merging". You can customize them in
      Team Settings → Workflow in Linear.
-6. Follow the instructions below to install the required runtime dependencies and start the service.
+7. Follow the instructions below to install the required runtime dependencies and start the service.
 
 ## Prerequisites
 
@@ -150,6 +152,74 @@ codex:
   reload error until the file is fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+
+## Running on Vers VMs
+
+Symphony supports running agents inside isolated [Vers](https://github.com/anthropics/vers) VMs
+instead of local workspaces. This provides full VM isolation for each agent run.
+
+### Prerequisites
+
+1. Install and configure the `vers` CLI
+2. Create a golden commit with your development environment pre-configured:
+   - The VM should have `pi` (or your preferred coding agent) installed
+   - Any other required tools (git, language runtimes, etc.) should be pre-installed
+
+### Configuration
+
+Add the `vers` section to your `WORKFLOW.md`:
+
+```yaml
+vers:
+  enabled: true
+  golden_commit: "your-golden-commit-uuid"  # From `vers commit`
+  max_runtime_ms: 1800000  # 30 minutes default
+```
+
+When `vers.enabled` is `true`, Symphony will:
+1. Create a fresh VM from the golden commit for each issue
+2. Run the `pi` coding agent inside the VM with the issue prompt
+3. Monitor the agent's output and poll for completion
+4. Delete the VM when the agent finishes or times out
+
+### Creating a Golden Commit
+
+First, generate the environment export script on your host machine:
+
+```bash
+# From the symphony/elixir directory, generate env exports for your API keys
+echo "export OPENAI_API_KEY='${OPENAI_API_KEY}'" > /tmp/symphony_env.sh
+echo "export LINEAR_API_KEY='${LINEAR_API_KEY}'" >> /tmp/symphony_env.sh
+echo "export ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}'" >> /tmp/symphony_env.sh
+echo "export GITHUB_TOKEN='${GITHUB_TOKEN}'" >> /tmp/symphony_env.sh
+```
+
+Then create and configure your VM:
+
+```bash
+# Start a new VM
+vers run ubuntu:22.04
+
+# Copy the env file into the VM
+vers copy /tmp/symphony_env.sh <vm-id>:/root/symphony_env.sh
+
+# Inside the VM, install your tools and configure environment
+vers execute <vm-id> -- bash -c '
+  apt-get update && apt-get install -y git nodejs npm curl
+  npm install -g @anthropic/pi  # or your preferred agent
+  
+  # Add env vars to .bashrc so they persist
+  echo "source /root/symphony_env.sh" >> ~/.bashrc
+  chmod 600 /root/symphony_env.sh
+'
+
+# Commit the configured VM state with secrets baked in
+vers commit <vm-id> -m "Symphony agent environment with API keys"
+# Note the commit UUID and use it in vers.golden_commit
+```
+
+> **Note:** This bakes your API keys into the golden commit. Keep the commit private and rotate
+> keys if the commit is ever exposed.
 
 ## Web dashboard
 

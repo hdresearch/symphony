@@ -34,6 +34,11 @@ codex:
   thread_sandbox: workspace-write
   turn_sandbox_policy:
     type: workspaceWrite
+# Uncomment to use Vers VMs instead of local Codex (see README.md for setup):
+# vers:
+#   enabled: true
+#   golden_commit: "your-golden-commit-uuid"  # From `vers commit`
+#   max_runtime_ms: 1800000  # 30 minutes
 ---
 
 You are working on a Linear ticket `{{ issue.identifier }}`
