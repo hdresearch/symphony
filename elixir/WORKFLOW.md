@@ -35,6 +35,9 @@ codex:
   turn_sandbox_policy:
     type: workspaceWrite
 # Uncomment to use Vers VMs instead of local Codex (see README.md for setup):
+# server:
+#   port: 80        # Use port 80 for https://<vm-id>.vm.vers.sh access
+#   host: "::"      # Listen on all interfaces (IPv6 + IPv4)
 # vers:
 #   enabled: true
 #   golden_commit: "your-golden-commit-uuid"  # From `vers commit`

@@ -155,71 +155,168 @@ codex:
 
 ## Running on Vers VMs
 
-Symphony supports running agents inside isolated [Vers](https://github.com/anthropics/vers) VMs
-instead of local workspaces. This provides full VM isolation for each agent run.
+Symphony can run inside a [Vers](https://vers.sh) VM, spawning child VMs for each agent.
+This provides full VM isolation and makes Symphony accessible at `https://<vm-id>.vm.vers.sh`.
 
-### Prerequisites
+### Architecture
 
-1. Install and configure the `vers` CLI
-2. Create a golden commit with your development environment pre-configured:
-   - The VM should have `pi` (or your preferred coding agent) installed
-   - Any other required tools (git, language runtimes, etc.) should be pre-installed
-
-### Configuration
-
-Add the `vers` section to your `WORKFLOW.md`:
-
-```yaml
-vers:
-  enabled: true
-  golden_commit: "your-golden-commit-uuid"  # From `vers commit`
-  max_runtime_ms: 1800000  # 30 minutes default
+```
+┌─────────────────────────────────────────────────────────┐
+│  Vers VM (Symphony Host)                                │
+│  https://<vm-id>.vm.vers.sh                             │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Symphony (port 80, listening on ::)            │   │
+│  │  - Polls Linear for issues                      │   │
+│  │  - Spawns child VMs from golden commit          │   │
+│  │  - Monitors agent execution                     │   │
+│  └─────────────────────────────────────────────────┘   │
+│           │                                             │
+│           ▼                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │ Agent VM 1  │  │ Agent VM 2  │  │ Agent VM N  │     │
+│  │ (pi agent)  │  │ (pi agent)  │  │ (pi agent)  │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+└─────────────────────────────────────────────────────────┘
 ```
 
-When `vers.enabled` is `true`, Symphony will:
-1. Create a fresh VM from the golden commit for each issue
-2. Run the `pi` coding agent inside the VM with the issue prompt
-3. Monitor the agent's output and poll for completion
-4. Delete the VM when the agent finishes or times out
+### Step 1: Create the Agent Golden Commit
 
-### Creating a Golden Commit
-
-First, generate the environment export script on your host machine:
+First, create a VM snapshot that will be used for each agent run:
 
 ```bash
-# From the symphony/elixir directory, generate env exports for your API keys
-echo "export OPENAI_API_KEY='${OPENAI_API_KEY}'" > /tmp/symphony_env.sh
-echo "export LINEAR_API_KEY='${LINEAR_API_KEY}'" >> /tmp/symphony_env.sh
-echo "export ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}'" >> /tmp/symphony_env.sh
-echo "export GITHUB_TOKEN='${GITHUB_TOKEN}'" >> /tmp/symphony_env.sh
-```
+# On your local machine, create the env file with your API keys
+cat > /tmp/symphony_env.sh << 'EOF'
+export ANTHROPIC_API_KEY='your-anthropic-key'
+export OPENAI_API_KEY='your-openai-key'
+export LINEAR_API_KEY='your-linear-key'
+export GITHUB_TOKEN='your-github-token'
+EOF
 
-Then create and configure your VM:
+# Start a fresh VM with extra disk space for Node.js
+vers run ubuntu:22.04 --fs-size-vm 4096
 
-```bash
-# Start a new VM
-vers run ubuntu:22.04
+# Note the VM ID from the output, then copy the env file
+vers copy <agent-vm-id> /tmp/symphony_env.sh /root/symphony_env.sh
 
-# Copy the env file into the VM
-vers copy /tmp/symphony_env.sh <vm-id>:/root/symphony_env.sh
+# Install the pi agent and configure environment
+vers execute <agent-vm-id> -- bash -c '
+  # Install Node.js 22.x
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs git build-essential
 
-# Inside the VM, install your tools and configure environment
-vers execute <vm-id> -- bash -c '
-  apt-get update && apt-get install -y git nodejs npm curl
-  npm install -g @anthropic/pi  # or your preferred agent
-  
-  # Add env vars to .bashrc so they persist
-  echo "source /root/symphony_env.sh" >> ~/.bashrc
+  # Install pi coding agent
+  npm install -g @mariozechner/pi-coding-agent
+
+  # Source env vars on login
+  echo "source /root/symphony_env.sh" >> /root/.bashrc
   chmod 600 /root/symphony_env.sh
+
+  # Verify installation
+  source /root/symphony_env.sh
+  pi --version
 '
 
-# Commit the configured VM state with secrets baked in
-vers commit <vm-id> -m "Symphony agent environment with API keys"
-# Note the commit UUID and use it in vers.golden_commit
+# Commit the configured state - save the commit UUID!
+vers commit <agent-vm-id>
+# Output: Commit ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-> **Note:** This bakes your API keys into the golden commit. Keep the commit private and rotate
-> keys if the commit is ever exposed.
+### Step 2: Create the Symphony Host VM
+
+```bash
+# Start the Symphony host VM with extra disk space
+vers run ubuntu:22.04 --fs-size-vm 4096
+
+# Note the VM ID - this will be your Symphony URL:
+# https://<symphony-vm-id>.vm.vers.sh
+
+# Copy your env file to the host VM too (Symphony needs LINEAR_API_KEY)
+vers copy <symphony-vm-id> /tmp/symphony_env.sh /root/symphony_env.sh
+
+# Install Elixir/Erlang and build Symphony
+vers execute <symphony-vm-id> -- bash -c '
+  # Install Erlang and Elixir
+  apt-get update
+  apt-get install -y erlang elixir git
+
+  # Clone Symphony
+  cd /root
+  git clone https://github.com/openai/symphony.git
+  cd symphony/elixir
+
+  # Build
+  mix local.hex --force
+  mix local.rebar --force
+  mix deps.get
+  mix build
+
+  # Source environment
+  echo "source /root/symphony_env.sh" >> /root/.bashrc
+'
+```
+
+### Step 3: Configure WORKFLOW.md
+
+Create or edit `/root/symphony/elixir/WORKFLOW.md` in the Symphony host VM:
+
+```yaml
+---
+tracker:
+  kind: linear
+  project_slug: "your-project-slug"  # From Linear project URL
+  active_states:
+    - Todo
+    - In Progress
+  terminal_states:
+    - Done
+    - Canceled
+
+agent:
+  max_concurrent_agents: 10
+  max_turns: 20
+
+server:
+  port: 80
+  host: "::"  # Listen on all IPv6 (and IPv4) interfaces
+
+vers:
+  enabled: true
+  golden_commit: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # From Step 1
+  max_runtime_ms: 1800000  # 30 minutes
+---
+
+# Your prompt template here...
+```
+
+### Step 4: Start Symphony
+
+```bash
+# SSH into the Symphony host VM
+vers connect <symphony-vm-id>
+
+# Inside the VM, start Symphony
+cd /root/symphony/elixir
+source /root/symphony_env.sh
+./bin/symphony ./WORKFLOW.md --port 80 --host "::" \
+  --i-understand-that-this-will-be-running-without-the-usual-guardrails
+```
+
+Symphony is now accessible at `https://<symphony-vm-id>.vm.vers.sh`
+
+### Step 5: (Optional) Commit the Symphony Host
+
+To preserve the Symphony host configuration:
+
+```bash
+# From your local machine
+vers commit <symphony-vm-id>
+```
+
+You can later restore it with `vers run-commit <commit-id>`.
+
+> **Security Note:** Both commits contain your API keys. Keep them private and rotate
+> keys if a commit is ever exposed.
 
 ## Web dashboard
 
