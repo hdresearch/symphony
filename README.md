@@ -34,6 +34,14 @@ help with the setup:
 > Set up Symphony for my repository based on
 > https://github.com/openai/symphony/blob/main/elixir/README.md
 
+### Option 3. Run on Vers VMs
+
+Symphony can run inside [Vers](https://vers.sh) VMs for full isolation, accessible at
+`https://<vm-id>.vm.vers.sh`. This deploys Symphony in a host VM that spawns child VMs for each
+agent run using the `pi` coding agent.
+
+See [elixir/README.md](elixir/README.md#running-on-vers-vms) for detailed setup instructions.
+
 ---
 
 ## License
