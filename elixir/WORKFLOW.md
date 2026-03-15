@@ -1,7 +1,10 @@
 ---
+# IMPORTANT: Update project_slug to match YOUR Linear project!
+# To find your project slug: Right-click your project in Linear, copy the URL,
+# and extract the slug from the path (e.g., https://linear.app/.../project/YOUR-SLUG-HERE)
 tracker:
   kind: linear
-  project_slug: "symphony-0c79b11b75ea"
+  project_slug: "symphony-0c79b11b75ea"  # <-- REPLACE with your project slug
   active_states:
     - Todo
     - In Progress

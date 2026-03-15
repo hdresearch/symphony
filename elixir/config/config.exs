@@ -1,5 +1,13 @@
 import Config
 
+# Configure Logger to output to console
+config :logger, :console,
+  format: "$time $metadata[$level] $message\n",
+  metadata: [:request_id]
+
+config :logger,
+  level: :debug
+
 config :phoenix, :json_library, Jason
 
 config :symphony_elixir, SymphonyElixirWeb.Endpoint,
