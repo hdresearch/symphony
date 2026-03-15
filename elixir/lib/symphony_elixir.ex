@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Application do
 
   @impl true
   def start(_type, _args) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} Application.start called\n", [:append])
     :ok = SymphonyElixir.LogFile.configure()
 
     children = [

@@ -158,6 +158,16 @@ codex:
 Symphony can run inside a [Vers](https://vers.sh) VM, spawning child VMs for each agent.
 This provides full VM isolation and makes Symphony accessible at `https://<vm-id>.vm.vers.sh`.
 
+### Prerequisites
+
+- **Vers CLI**: Install from source at https://github.com/hdresearch/vers-cli
+  - Ensure the `-t` (timeout) flag is available on `vers execute` and `vers copy` commands
+  - This is needed for long-running agent operations that exceed the default 30s timeout
+- **Linear Project Slug**: You'll need the exact project slug from your Linear project URL
+  - Right-click your project in Linear and copy the URL
+  - The slug is the portion after `/project/` (e.g., `my-project-abc123def456`)
+  - **Important**: If you're unsure about the exact slug, verify it in Linear before proceeding
+
 ### Architecture
 
 ```

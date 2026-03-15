@@ -19,6 +19,7 @@ defmodule SymphonyElixir.CLI do
 
   @spec main([String.t()]) :: no_return()
   def main(args) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} CLI.main called with #{inspect(args)}\n", [:append])
     case evaluate(args) do
       :ok ->
         wait_for_shutdown()

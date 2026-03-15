@@ -50,6 +50,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   @impl true
   def init(_opts) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} Orchestrator.init called\n", [:append])
     now_ms = System.monotonic_time(:millisecond)
     config = Config.settings!()
 
@@ -222,6 +223,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_dispatch(%State{} = state) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} maybe_dispatch called\n", [:append])
     state = reconcile_running_issues(state)
 
     with :ok <- Config.validate!(),
@@ -678,10 +680,13 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp do_dispatch_issue(%State{} = state, issue, attempt, preferred_worker_host) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} do_dispatch_issue called\n", [:append])
     recipient = self()
 
     # If Vers is enabled, use VersAgentRunner which manages its own VMs
-    if Config.settings!().vers.enabled do
+    vers_enabled = Config.settings!().vers.enabled
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} vers.enabled = #{vers_enabled}\n", [:append])
+    if vers_enabled do
       spawn_issue_with_vers(state, issue, attempt, recipient)
     else
       # Otherwise use SSH worker selection (or local if no workers configured)
@@ -697,7 +702,9 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp spawn_issue_with_vers(%State{} = state, issue, attempt, recipient) do
+    File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} spawn_issue_with_vers called\n", [:append])
     case Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+           File.write!("/tmp/vers_debug.log", "#{DateTime.utc_now()} Task started, calling VersAgentRunner.run\n", [:append])
            VersAgentRunner.run(issue, recipient, attempt: attempt)
          end) do
       {:ok, pid} ->
